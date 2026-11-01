@@ -1200,6 +1200,49 @@ describe('runNonInteractiveStreamJson', () => {
     );
   });
 
+  it('shuts a stream-json session down on SIGHUP like SIGTERM', async () => {
+    const { continueResults, getControlContext } = installContinueDispatch();
+    createInitializedLlmClient([
+      { role: 'user', parts: [{ text: 'resume me' }] },
+    ]);
+    const initRequest = createControlRequest('initialize');
+    const userMessage = createUserMessage('first turn');
+
+    let releaseFirstTurn!: () => void;
+    runNonInteractiveMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirstTurn = resolve;
+        }),
+    );
+
+    mockInputReader.read = async function* () {
+      yield initRequest;
+      yield userMessage;
+      await vi.waitFor(() => {
+        expect(runNonInteractiveMock).toHaveBeenCalledTimes(1);
+        expect(getControlContext()).toBeDefined();
+      });
+      continueResults.push(await getControlContext()?.onContinueLastTurn?.());
+      // Closing the terminal hangs the session up instead of interrupting it.
+      process.emit('SIGHUP', 'SIGHUP');
+      releaseFirstTurn();
+    };
+
+    await runNonInteractiveStreamJson(config, '');
+
+    expect(continueResults).toEqual([
+      { accepted: true, interruption: 'interrupted_prompt' },
+    ]);
+    expect(runNonInteractiveMock).toHaveBeenCalledTimes(1);
+    expect(mockOutputAdapter.emitResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isError: true,
+        errorMessage: 'Continuation abandoned: session shut down before it ran',
+      }),
+    );
+  });
+
   it('emits an error result when a scheduled continue turn fails', async () => {
     const { continueResults } = installContinueDispatch();
     createInitializedLlmClient([

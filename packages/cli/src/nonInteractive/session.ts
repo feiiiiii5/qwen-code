@@ -891,6 +891,7 @@ class Session {
 
     process.on('SIGINT', this.shutdownHandler);
     process.on('SIGTERM', this.shutdownHandler);
+    process.on('SIGHUP', this.shutdownHandler);
   }
 
   /**
@@ -1003,6 +1004,7 @@ class Session {
     if (this.shutdownHandler) {
       process.removeListener('SIGINT', this.shutdownHandler);
       process.removeListener('SIGTERM', this.shutdownHandler);
+      process.removeListener('SIGHUP', this.shutdownHandler);
       this.shutdownHandler = null;
     }
   }

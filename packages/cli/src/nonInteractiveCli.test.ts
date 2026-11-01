@@ -7864,6 +7864,44 @@ describe('runNonInteractive', () => {
     });
   });
 
+  it('treats a terminal hangup (SIGHUP) as a headless shutdown signal', async () => {
+    setupMetricsMock();
+    const runAbortController = new AbortController();
+    mockLlmClient.sendMessageStream.mockReturnValue(
+      (async function* () {
+        await new Promise<void>((resolve) => {
+          if (runAbortController.signal.aborted) {
+            resolve();
+            return;
+          }
+          runAbortController.signal.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+        yield {
+          type: LlmEventType.Finished,
+          value: { reason: undefined, usageMetadata: { totalTokenCount: 0 } },
+        } as ServerLlmStreamEvent;
+      })(),
+    );
+
+    const run = runNonInteractive(
+      mockConfig,
+      mockSettings,
+      'wait for the hangup',
+      'prompt-sighup',
+      { abortController: runAbortController, recoverableCancellation: true },
+    );
+    await vi.waitFor(() => {
+      expect(mockLlmClient.sendMessageStream).toHaveBeenCalled();
+    });
+    expect(process.listenerCount('SIGHUP')).toBeGreaterThan(0);
+    process.emit('SIGHUP', 'SIGHUP');
+
+    await expect(run).rejects.toThrow('process.exit(130) called');
+    expect(runAbortController.signal.aborted).toBe(true);
+  });
+
   it('emits the effective fork context mode in headless task events', async () => {
     (mockConfig.getOutputFormat as Mock).mockReturnValue(
       OutputFormat.STREAM_JSON,

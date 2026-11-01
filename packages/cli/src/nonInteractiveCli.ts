@@ -1113,6 +1113,9 @@ export async function runNonInteractive(
 
       process.on('SIGINT', shutdownHandler);
       process.on('SIGTERM', shutdownHandler);
+      // A closed terminal sends SIGHUP; without a listener its default
+      // disposition kills the run before the abort reaches the child.
+      process.on('SIGHUP', shutdownHandler);
 
       try {
         await modSession?.initialize(abortController.signal);
@@ -4013,6 +4016,7 @@ export async function runNonInteractive(
       // Cleanup signal handlers
       process.removeListener('SIGINT', shutdownHandler);
       process.removeListener('SIGTERM', shutdownHandler);
+      process.removeListener('SIGHUP', shutdownHandler);
       if (isTelemetrySdkInitialized()) {
         await shutdownTelemetry();
       }
