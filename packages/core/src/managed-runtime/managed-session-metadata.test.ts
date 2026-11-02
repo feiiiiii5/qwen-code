@@ -147,6 +147,9 @@ describe('managed session metadata', () => {
     };
   };
 
+  // Fixtures are clean before corruption, and no caller composes two
+  // corruptions on one file, so strict JSON.parse is intentional: a parse
+  // failure here means the fixture itself is wrong, not a tolerant reader case.
   async function readTranscriptLines(filePath: string) {
     const lines = (await fs.readFile(filePath, 'utf8')).split('\n');
     const records = lines.map((line) =>
@@ -155,6 +158,10 @@ describe('managed session metadata', () => {
     return { lines, records };
   }
 
+  // Locate the corruption site by record content rather than by a physical
+  // line index: the probe stays correct when the fixture gains or loses lines,
+  // and an index-based probe once drifted from the records it claimed to
+  // corrupt, leaving the suite green while testing the wrong pair.
   async function glueRecords(
     filePath: string,
     probe: (record: TranscriptRecord) => boolean,
